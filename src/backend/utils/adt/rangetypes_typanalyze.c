@@ -58,9 +58,6 @@ range_typanalyze(PG_FUNCTION_ARGS)
 	stats->extra_data = typcache;
 	/* same as in std_typanalyze */
 	stats->minrows = 300 * attr->attstattarget;
-	printf("%d\n", stats->minrows);
-	printf("hello\n");
-	fflush(stdout);
 
 	PG_RETURN_BOOL(true);
 }
@@ -257,6 +254,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 	{
 		Datum	   *bound_hist_values;
 		Datum	   *length_hist_values;
+		Datum	   *freq_hist_values;
 		int			pos,
 					posfrac,
 					delta,
@@ -401,6 +399,71 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		stats->statyplen[slot_idx] = sizeof(float8);
 		stats->statypbyval[slot_idx] = FLOAT8PASSBYVAL;
 		stats->statypalign[slot_idx] = 'd';
+		slot_idx++;
+
+		/*
+		We create our histogram
+		*/
+		if(non_empty_cnt>=2){
+
+			num_hist = 10;
+			if(non_empty_cnt % num_hist != 0){
+				num_hist += 1;
+			}
+			RangeBound lower = (RangeBound) lowers[0];
+			RangeBound upper = (RangeBound) uppers[non_empty_cnt-1];
+			if(num_hist > upper.val){
+				num_hist = upper.val;
+			}
+
+			RangeBound currentUpper;
+			RangeBound currentLower;
+			int beginBin;
+			int endBin;
+			int depth = (int) ((upper.val - lower.val ) / num_hist);
+			printf("Depth : %d\n", depth);
+
+			freq_hist_values = (int *) palloc(num_hist * sizeof(int));
+
+			/*
+			* The object of this loop is to increment the part of the histogram 
+			* where the current range is encountered
+			*
+			*/
+
+			printf("Lower : %d\n", lower.val);
+			printf("Upper : %d\n", upper.val);
+
+			for(i = 0; i < num_hist; i++){
+				freq_hist_values[i] = 0;
+			}
+
+			for(i = 0; i < non_empty_cnt; i++){
+				currentLower = (RangeBound) lowers[i]; 
+				currentUpper = (RangeBound) uppers[i]; 
+
+				endBin = (int) ((currentUpper.val - lower.val) / depth);
+				beginBin = (int) ((currentLower.val - lower.val) / depth);
+				printf("Begin : %d\n", beginBin);
+				printf("End : %d\n", endBin);
+
+				if (endBin == beginBin){
+					endBin++;
+				}
+
+				for(int j = beginBin; j < endBin; j++){
+					freq_hist_values[j] += 1;
+				}
+			}
+
+			for(int k = 0; k < num_hist; k++){
+				printf(" i = %d", k);
+				printf(" val = %d\n", freq_hist_values[k]);
+			}
+
+			fflush(stdout);
+
+		}
 
 		/* Store the fraction of empty ranges */
 		emptyfrac = (float4 *) palloc(sizeof(float4));
