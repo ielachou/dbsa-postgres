@@ -17,9 +17,54 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
+#include <stdio.h>
 
 #include "utils/builtins.h"
 #include "utils/geo_decls.h"
+
+#include <ctype.h>
+#include <math.h>
+
+#include "access/brin.h"
+#include "access/brin_page.h"
+#include "access/gin.h"
+#include "access/table.h"
+#include "access/tableam.h"
+#include "access/visibilitymap.h"
+#include "catalog/pg_am.h"
+#include "catalog/pg_collation.h"
+#include "catalog/pg_operator.h"
+#include "catalog/pg_statistic.h"
+#include "catalog/pg_statistic_ext.h"
+#include "executor/nodeAgg.h"
+#include "miscadmin.h"
+#include "nodes/makefuncs.h"
+#include "nodes/nodeFuncs.h"
+#include "optimizer/clauses.h"
+#include "optimizer/cost.h"
+#include "optimizer/optimizer.h"
+#include "optimizer/pathnode.h"
+#include "optimizer/paths.h"
+#include "optimizer/plancat.h"
+#include "parser/parse_clause.h"
+#include "parser/parsetree.h"
+#include "statistics/statistics.h"
+#include "storage/bufmgr.h"
+#include "utils/acl.h"
+#include "utils/date.h"
+#include "utils/datum.h"
+#include "utils/fmgroids.h"
+#include "utils/index_selfuncs.h"
+#include "utils/lsyscache.h"
+#include "utils/memutils.h"
+#include "utils/pg_locale.h"
+#include "utils/rel.h"
+#include "utils/selfuncs.h"
+#include "utils/snapmgr.h"
+#include "utils/spccache.h"
+#include "utils/syscache.h"
+#include "utils/timestamp.h"
+#include "utils/typcache.h"
 
 
 /*
@@ -54,6 +99,49 @@ areasel(PG_FUNCTION_ARGS)
 Datum
 areajoinsel(PG_FUNCTION_ARGS)
 {
+	PlannerInfo *root = (PlannerInfo *) PG_GETARG_POINTER(0);
+	Oid operator = PG_GETARG_OID(1);
+	List *args = (List *) PG_GETARG_POINTER(2);
+	SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) PG_GETARG_POINTER(4);
+
+	Node *left,
+		 *right;
+	VariableStatData leftvar,
+					 rightvar;
+	bool reversed;
+	HeapTuple statsTuple;
+	double nullfrac;
+
+	AttStatsSlot sslot;
+	memset(&sslot, 0, sizeof(AttStatsSlot));
+	
+	printf("BEFORE\n");
+
+	get_join_variables(root, args, sjinfo, &leftvar, &rightvar, &reversed);
+	if(get_attstatsslot(&sslot, leftvar.statsTuple, STATISTIC_KIND_FREQ_HISTOGRAM, 
+						OID_RANGE_OVERLAP_OP, ATTSTATSSLOT_VALUES)){
+		printf("IN\n");
+			for (int i = 0; i < 10; i++){
+				printf("%ld\n", sslot.values[i]);
+			}
+	}else{
+		ReleaseVariableStats(leftvar);
+		ReleaseVariableStats(rightvar);
+	}
+	printf("OUT\n");
+	free_attstatsslot(&sslot);
+	//
+	fflush(stdout);
+	//statsTuple = leftvar.statsTuple;
+	//Form_pg_statistic stats = ((Form_pg_statistic) GETSTRUCT(statsTuple));
+	//Datum* freq_hist_values = stats->stavalues2;
+	//Datum* freq_hist_values = ((Form_pg_statistic) GETSTRUCT(statsTuple))->stavalues[2];
+	/*for(int k = 0; k < 10; k++){
+				printf(" i = %d", k);
+				printf(" val = %d\n", freq_hist_values[k]);
+	}*/
+
+
 	PG_RETURN_FLOAT8(0.005);
 }
 

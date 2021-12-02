@@ -399,6 +399,14 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		stats->statyplen[slot_idx] = sizeof(float8);
 		stats->statypbyval[slot_idx] = FLOAT8PASSBYVAL;
 		stats->statypalign[slot_idx] = 'd';
+
+				/* Store the fraction of empty ranges */
+		emptyfrac = (float4 *) palloc(sizeof(float4));
+		*emptyfrac = ((double) empty_cnt) / ((double) non_null_cnt);
+		stats->stanumbers[slot_idx] = emptyfrac;
+		stats->numnumbers[slot_idx] = 1;
+
+		stats->stakind[slot_idx] = STATISTIC_KIND_BOUNDS_HISTOGRAM;
 		slot_idx++;
 
 		/*
@@ -407,9 +415,6 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		if(non_empty_cnt>=2){
 
 			num_hist = 10;
-			if(non_empty_cnt % num_hist != 0){
-				num_hist += 1;
-			}
 			RangeBound lower = (RangeBound) lowers[0];
 			RangeBound upper = (RangeBound) uppers[non_empty_cnt-1];
 			if(num_hist > upper.val){
@@ -423,7 +428,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			int depth = (int) ((upper.val - lower.val ) / num_hist);
 			printf("Depth : %d\n", depth);
 
-			freq_hist_values = (int *) palloc(num_hist * sizeof(int));
+			freq_hist_values = (Datum *) palloc(num_hist * sizeof(int));
 
 			/*
 			* The object of this loop is to increment the part of the histogram 
@@ -447,32 +452,32 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 				printf("Begin : %d\n", beginBin);
 				printf("End : %d\n", endBin);
 
+				if (endBin >num_hist){
+					endBin = num_hist;
+				}
 				if (endBin == beginBin){
 					endBin++;
 				}
 
 				for(int j = beginBin; j < endBin; j++){
-					freq_hist_values[j] += 1;
+					freq_hist_values[j]+=1;
 				}
-			}
-
-			for(int k = 0; k < num_hist; k++){
-				printf(" i = %d", k);
-				printf(" val = %d\n", freq_hist_values[k]);
 			}
 
 			fflush(stdout);
 
 		}
+		stats->staop[slot_idx] = OID_RANGE_OVERLAP_OP;
+		stats->stacoll[slot_idx] = InvalidOid;
+		stats->stavalues[slot_idx] = freq_hist_values;
+		stats->numvalues[slot_idx] = num_hist;
+		stats->statypid[slot_idx] = FLOAT8OID;
+		stats->statyplen[slot_idx] = sizeof(float8);
+		stats->statypbyval[slot_idx] = FLOAT8PASSBYVAL;
+		stats->statypalign[slot_idx] = 'd';
 
-		/* Store the fraction of empty ranges */
-		emptyfrac = (float4 *) palloc(sizeof(float4));
-		*emptyfrac = ((double) empty_cnt) / ((double) non_null_cnt);
-		stats->stanumbers[slot_idx] = emptyfrac;
-		stats->numnumbers[slot_idx] = 1;
+		stats->stakind[slot_idx] = STATISTIC_KIND_FREQ_HISTOGRAM;
 
-		stats->stakind[slot_idx] = STATISTIC_KIND_RANGE_LENGTH_HISTOGRAM;
-		slot_idx++;
 
 		MemoryContextSwitchTo(old_cxt);
 	}
