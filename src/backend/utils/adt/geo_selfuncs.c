@@ -203,6 +203,25 @@ areajoinsel(PG_FUNCTION_ARGS)
             elog(ERROR, "bounds histogram contains an empty range");
     }
 
+    /* Freq Histogram left var*/
+    typcache = range_get_typcache(fcinfo, vardata1.vartype);
+	memset(&sslot1, 0, sizeof(sslot1));
+    if (HeapTupleIsValid(vardata1.statsTuple)){
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
+
+    if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
+                            STATISTIC_KIND_FREQ_HISTOGRAM, 
+                    OID_RANGE_OVERLAP_OP, ATTSTATSSLOT_VALUES)){
+        ReleaseVariableStats(vardata1);
+        ReleaseVariableStats(vardata2);
+        PG_RETURN_FLOAT8((float8) selec);
+    }
+    printf("hihihihihi");
+    printf("%d", sslot1.nvalues);
+    for ( i = 0; i < 10; i++){
+        printf("%d\n", DatumGetInt32(sslot1.values[i]));
+    }
+    printf("finihihihih");
 
 
 
