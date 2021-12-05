@@ -66,6 +66,16 @@
 #include "utils/timestamp.h"
 #include "utils/typcache.h"
 
+#include "access/htup_details.h"
+#include "catalog/pg_statistic.h"
+#include "nodes/pg_list.h"
+#include "optimizer/pathnode.h"
+#include "optimizer/optimizer.h"
+#include "utils/lsyscache.h"
+#include "utils/typcache.h"
+#include "utils/selfuncs.h"
+#include "utils/rangetypes.h"
+
 
 /*
  *	Selectivity functions for geometric operators.  These are bogus -- unless
@@ -100,50 +110,199 @@ Datum
 areajoinsel(PG_FUNCTION_ARGS)
 {
 	PlannerInfo *root = (PlannerInfo *) PG_GETARG_POINTER(0);
-	Oid operator = PG_GETARG_OID(1);
-	List *args = (List *) PG_GETARG_POINTER(2);
-	SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) PG_GETARG_POINTER(4);
+    Oid         operator = PG_GETARG_OID(1);
+    List       *args = (List *) PG_GETARG_POINTER(2);
+    JoinType    jointype = (JoinType) PG_GETARG_INT16(3);
+    SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) PG_GETARG_POINTER(4);
+    Oid         collation = PG_GET_COLLATION();
 
-	Node *left,
-		 *right;
-	VariableStatData leftvar,
-					 rightvar;
-	bool reversed;
-	HeapTuple statsTuple;
-	double nullfrac;
+    double      selec = 0.005;
 
-	AttStatsSlot sslot;
-	memset(&sslot, 0, sizeof(AttStatsSlot));
+    VariableStatData vardata1;
+    VariableStatData vardata2;
+    Oid         opfuncoid;
+    AttStatsSlot sslot1, sslot2;
+    int         nhist;
+    RangeBound *hist_lower1, *hist_lower2;
+    RangeBound *hist_upper1, *hist_upper2;
+	Datum *hist_freq1, *hist_freq2;
+    int         i;
+    Form_pg_statistic stats1 = NULL;
+    TypeCacheEntry *typcache = NULL;
+    bool        join_is_reversed;
+    bool        empty;
+
+
+    get_join_variables(root, args, sjinfo,
+                       &vardata1, &vardata2, &join_is_reversed);
+
+    typcache = range_get_typcache(fcinfo, vardata1.vartype);
+    opfuncoid = get_opcode(operator);
+
+    memset(&sslot1, 0, sizeof(sslot1));
+	memset(&sslot2, 0, sizeof(sslot2));
+
+/*Bound Histogram left Var */
+    /* Can't use the histogram with insecure range support functions */
+    if (!statistic_proc_security_check(&vardata1, opfuncoid))
+        PG_RETURN_FLOAT8((float8) selec);
+
+    if (HeapTupleIsValid(vardata1.statsTuple))
+    {
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
+        /* Try to get fraction of empty ranges */
+        if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
+                             STATISTIC_KIND_BOUNDS_HISTOGRAM,
+                             InvalidOid, ATTSTATSSLOT_VALUES))
+        {
+            ReleaseVariableStats(vardata1);
+            ReleaseVariableStats(vardata2);
+            PG_RETURN_FLOAT8((float8) selec);
+        }
+    }
+    nhist = sslot1.nvalues;
+    hist_lower1 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
+	hist_upper1 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
+	    for (i = 0; i < nhist; i++)
+    {
+        range_deserialize(typcache, DatumGetRangeTypeP(sslot1.values[i]),
+                          &hist_lower1[i], &hist_upper1[i], &empty);
+        /* The histogram should not contain any empty ranges */
+        if (empty)
+            elog(ERROR, "bounds histogram contains an empty range");
+    }
+
+
+	typcache = range_get_typcache(fcinfo, vardata2.vartype);
+	/*Bound Histogram right var*/
+	/* Can't use the histogram with insecure range support functions */
+    if (!statistic_proc_security_check(&vardata2, opfuncoid))
+        PG_RETURN_FLOAT8((float8) selec);
+
+    if (HeapTupleIsValid(vardata2.statsTuple))
+    {
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata2.statsTuple);
+        /* Try to get fraction of empty ranges */
+        if (!get_attstatsslot(&sslot2, vardata2.statsTuple,
+                             STATISTIC_KIND_BOUNDS_HISTOGRAM,
+                             InvalidOid, ATTSTATSSLOT_VALUES))
+        {
+            ReleaseVariableStats(vardata1);
+            ReleaseVariableStats(vardata2);
+            PG_RETURN_FLOAT8((float8) selec);
+        }
+    }
+    hist_upper2 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
+	hist_lower2 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
+    for (i = 0; i < nhist; i++)
+    {
+        range_deserialize(typcache, DatumGetRangeTypeP(sslot2.values[i]),
+                          &hist_lower2[i], &hist_upper2[i], &empty);
+        /* The histogram should not contain any empty ranges */
+        if (empty)
+            elog(ERROR, "bounds histogram contains an empty range");
+    }
+
+
+
+
+
+    printf("hist_lower = [");
+    for (i = 0; i < nhist; i++)
+    {
+        printf("%d", DatumGetInt16(hist_lower1[i].val));
+        if (i < nhist - 1)
+            printf(", ");
+    }
+    printf("]\n");
+    printf("hist_upper = [");
+    for (i = 0; i < nhist; i++)
+    {
+        printf("%d", DatumGetInt16(hist_upper1[i].val));
+        if (i < nhist - 1)
+            printf(", ");
+    }
+    printf("]\n");
+
+        printf("hist_lower = [");
+    for (i = 0; i < nhist; i++)
+    {
+        printf("%d", DatumGetInt16(hist_lower2[i].val));
+        if (i < nhist - 1)
+            printf(", ");
+    }
+    printf("]\n");
+    printf("hist_upper = [");
+    for (i = 0; i < nhist; i++)
+    {
+        printf("%d", DatumGetInt16(hist_upper2[i].val));
+        if (i < nhist - 1)
+            printf(", ");
+    }
+    printf("]\n");
+
+
+    fflush(stdout);
+
+    pfree(hist_lower1);
+    pfree(hist_upper1);
+	pfree(hist_lower2);
+	pfree(hist_upper2);
+
+    free_attstatsslot(&sslot1);
+	free_attstatsslot(&sslot2);
+
+    ReleaseVariableStats(vardata1);
+    ReleaseVariableStats(vardata2);
+
+    CLAMP_PROBABILITY(selec);
+    PG_RETURN_FLOAT8((float8) selec);
+
+
+	/*PlannerInfo *root = (PlannerInfo *) PG_GETARG_POINTER(0);
+    Oid         operator = PG_GETARG_OID(1);
+    List       *args = (List *) PG_GETARG_POINTER(2);
+    JoinType    jointype = (JoinType) PG_GETARG_INT16(3);
+    SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) PG_GETARG_POINTER(4);
+    Oid         collation = PG_GET_COLLATION();
+
+	double      selec = 0.005;
+
+    VariableStatData vardata1;
+    VariableStatData vardata2;
+
+	AttStatsSlot sslot1;
+	int         i;
+	bool join_is_reversed;
+	Form_pg_statistic stats1 = NULL;
+    TypeCacheEntry *typcache = NULL;
 	
-	printf("BEFORE\n");
 
-	get_join_variables(root, args, sjinfo, &leftvar, &rightvar, &reversed);
-	if(get_attstatsslot(&sslot, leftvar.statsTuple, STATISTIC_KIND_FREQ_HISTOGRAM, 
+	get_join_variables(root, args, sjinfo,
+                       &vardata1, &vardata2, &join_is_reversed);
+	typcache = range_get_typcache(fcinfo, vardata1.vartype);
+	memset(&sslot1, 0, sizeof(sslot1));
+	    if (HeapTupleIsValid(vardata1.statsTuple)){
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
+
+        if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
+                             STATISTIC_KIND_FREQ_HISTOGRAM, 
 						OID_RANGE_OVERLAP_OP, ATTSTATSSLOT_VALUES)){
-		printf("IN\n");
-			for (int i = 0; i < 10; i++){
-				printf("%ld\n", sslot.values[i]);
+            ReleaseVariableStats(vardata1);
+            ReleaseVariableStats(vardata2);
+            PG_RETURN_FLOAT8((float8) selec);
+        }
+		printf("%d", sslot1.nvalues);
+		for ( i = 0; i < 10; i++){
+				printf("%d\n", DatumGetInt32(sslot1.values[i]));
 			}
-	}else{
-		ReleaseVariableStats(leftvar);
-		ReleaseVariableStats(rightvar);
-	}
-	printf("OUT\n");
-	free_attstatsslot(&sslot);
-	//
-	fflush(stdout);
-	//statsTuple = leftvar.statsTuple;
-	//Form_pg_statistic stats = ((Form_pg_statistic) GETSTRUCT(statsTuple));
-	//Datum* freq_hist_values = stats->stavalues2;
-	//Datum* freq_hist_values = ((Form_pg_statistic) GETSTRUCT(statsTuple))->stavalues[2];
-	/*for(int k = 0; k < 10; k++){
-				printf(" i = %d", k);
-				printf(" val = %d\n", freq_hist_values[k]);
-	}*/
+		free_attstatsslot(&sslot1);*/
+
+		
+    }
 
 
-	PG_RETURN_FLOAT8(0.005);
-}
+
 
 /*
  *	positionsel

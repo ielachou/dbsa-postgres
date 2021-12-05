@@ -425,10 +425,10 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			RangeBound currentLower;
 			int beginBin;
 			int endBin;
-			int depth = (int) ((upper.val - lower.val ) / num_hist);
+			int depth = (int) ((upper.val-1 - lower.val ) / num_hist);
 			printf("Depth : %d\n", depth);
 
-			freq_hist_values = (Datum *) palloc(num_hist * sizeof(int));
+			freq_hist_values = (Datum *) palloc(num_hist * sizeof(Datum));
 
 			/*
 			* The object of this loop is to increment the part of the histogram 
@@ -437,7 +437,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			*/
 
 			printf("Lower : %d\n", lower.val);
-			printf("Upper : %d\n", upper.val);
+			printf("Upper : %d\n", upper.val-1);
 
 			for(i = 0; i < num_hist; i++){
 				freq_hist_values[i] = 0;
@@ -447,21 +447,21 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 				currentLower = (RangeBound) lowers[i]; 
 				currentUpper = (RangeBound) uppers[i]; 
 
-				endBin = (int) ((currentUpper.val - lower.val) / depth);
+				endBin = (int) ((currentUpper.val-1 - lower.val) / depth);
 				beginBin = (int) ((currentLower.val - lower.val) / depth);
 				printf("Begin : %d\n", beginBin);
 				printf("End : %d\n", endBin);
 
 				if (endBin >num_hist){
-					endBin = num_hist;
-				}
-				if (endBin == beginBin){
-					endBin++;
+					endBin = num_hist-1;
 				}
 
-				for(int j = beginBin; j < endBin; j++){
+				for(int j = beginBin; j < endBin+1; j++){
 					freq_hist_values[j]+=1;
 				}
+			}
+			for(int k = 0; k < 10;k++){
+				printf("i : %d , val : %d\n", k, freq_hist_values[k]);
 			}
 
 			fflush(stdout);
