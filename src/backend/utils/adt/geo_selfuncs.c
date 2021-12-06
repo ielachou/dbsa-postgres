@@ -116,7 +116,7 @@ areajoinsel(PG_FUNCTION_ARGS)
     SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) PG_GETARG_POINTER(4);
     Oid         collation = PG_GET_COLLATION();
 
-    double      selec = 0.005;
+    double      selec = 0.0;
 
     VariableStatData vardata1;
     VariableStatData vardata2;
@@ -131,6 +131,8 @@ areajoinsel(PG_FUNCTION_ARGS)
     TypeCacheEntry *typcache = NULL;
     bool        join_is_reversed;
     bool        empty;
+
+    int count1, count2;
 
 
     get_join_variables(root, args, sjinfo,
@@ -203,10 +205,13 @@ areajoinsel(PG_FUNCTION_ARGS)
             elog(ERROR, "bounds histogram contains an empty range");
     }
 
+    count1 = sslot1.nvalues;
+    count2 = sslot2.nvalues;
+
     /* Freq Histogram left var*/
     typcache = range_get_typcache(fcinfo, vardata1.vartype);
 	memset(&sslot1, 0, sizeof(sslot1));
-    if (HeapTupleIsValid(vardata1.statsTuple)){
+    if (HeapTupleIsValid(vardata1.statsTuple))
         stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
 
     if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
@@ -216,50 +221,75 @@ areajoinsel(PG_FUNCTION_ARGS)
         ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
     }
-    printf("hihihihihi");
-    printf("%d", sslot1.nvalues);
+    printf("hihihihihi\n");
+    printf("%d\n", sslot1.nvalues);
     for ( i = 0; i < 10; i++){
         printf("%d\n", DatumGetInt32(sslot1.values[i]));
     }
-    printf("finihihihih");
+    printf("finihihihih\n");
 
 
+    /* Freq Histogram right var*/
+    typcache = range_get_typcache(fcinfo, vardata2.vartype);
+	memset(&sslot2, 0, sizeof(sslot2));
+    if (HeapTupleIsValid(vardata2.statsTuple))
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
 
-
-    printf("hist_lower = [");
-    for (i = 0; i < nhist; i++)
-    {
-        printf("%d", DatumGetInt16(hist_lower1[i].val));
-        if (i < nhist - 1)
-            printf(", ");
+    if (!get_attstatsslot(&sslot2, vardata2.statsTuple,
+                            STATISTIC_KIND_FREQ_HISTOGRAM, 
+                    OID_RANGE_OVERLAP_OP, ATTSTATSSLOT_VALUES)){
+        ReleaseVariableStats(vardata1);
+        ReleaseVariableStats(vardata2);
+        PG_RETURN_FLOAT8((float8) selec);
     }
-    printf("]\n");
-    printf("hist_upper = [");
-    for (i = 0; i < nhist; i++)
-    {
-        printf("%d", DatumGetInt16(hist_upper1[i].val));
-        if (i < nhist - 1)
-            printf(", ");
+    printf("hihihihihi");
+    printf("%d\n", sslot2.nvalues);
+    for ( i = 0; i < 10; i++){
+        printf("%d\n", DatumGetInt32(sslot2.values[i]));
     }
-    printf("]\n");
+    printf("finihihihih\n");
 
-        printf("hist_lower = [");
-    for (i = 0; i < nhist; i++)
-    {
-        printf("%d", DatumGetInt16(hist_lower2[i].val));
-        if (i < nhist - 1)
-            printf(", ");
-    }
-    printf("]\n");
-    printf("hist_upper = [");
-    for (i = 0; i < nhist; i++)
-    {
-        printf("%d", DatumGetInt16(hist_upper2[i].val));
-        if (i < nhist - 1)
-            printf(", ");
-    }
-    printf("]\n");
 
+    int currentLower1, currentLower2, currentUpper1, currentUpper2;
+    int depth1, depth2;
+    depth1 = (DatumGetInt16(hist_upper1[count1 -1].val) -1 
+                            - DatumGetInt16(hist_lower1[0].val)) / sslot1.nvalues;
+    depth2 = (DatumGetInt16(hist_upper2[count2-1].val) -1 
+                            - DatumGetInt16(hist_lower2[0].val)) / sslot2.nvalues;
+    float mult = 0.0;
+    for(i = 0; i < sslot2.nvalues; i++){
+        currentLower2 = (depth2 * i) + DatumGetInt16(hist_lower2[0].val);
+        currentUpper2 = (depth2 * i) + DatumGetInt16(hist_lower2[0].val) + depth2;
+        if(i == 9){
+            currentUpper2 = DatumGetInt16(hist_upper2[count2 -1].val);
+        }
+        for(int j = 0; j < sslot1.nvalues; j++){
+            currentLower1 = (depth1 * j) + DatumGetInt16(hist_lower1[0].val);
+            currentUpper1 = (depth1 * j) + DatumGetInt16(hist_lower1[0].val) + depth1;
+            
+            if(j == 9){
+                currentUpper1 = DatumGetInt16(hist_upper1[count1 -1].val);
+            }
+            if(currentLower1 <= currentLower2){
+                if(currentUpper1 >= currentLower2){
+                    mult = ((float) currentUpper1 - (float) currentLower2) / (float) depth1;
+                    selec += (DatumGetInt32(sslot1.values[j]) * DatumGetInt32(sslot2.values[i]) * mult);
+                }
+            }else{
+                if(currentUpper2 >= currentLower1){
+                    mult = ((float) currentUpper2 - (float) currentLower1) / (float) depth2;
+                    selec += (DatumGetInt32(sslot1.values[j]) * DatumGetInt16(sslot2.values[i]) * mult);
+                }
+            }
+        }
+    }
+    if(count1 < count2){
+        selec = selec*2 / (count1 * sslot1.nvalues * sslot2.nvalues);
+    }else{
+        selec = selec*2 / (count2 * sslot1.nvalues * sslot2.nvalues);
+    }
+
+    printf("calc : %f", selec);
 
     fflush(stdout);
 
