@@ -470,7 +470,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		stats->staop[slot_idx] = OID_RANGE_OVERLAP_OP;
 		stats->stacoll[slot_idx] = InvalidOid;
 		stats->stavalues[slot_idx] = freq_hist_values;
-		stats->numvalues[slot_idx] = num_hist;
+		stats->numvalues[slot_idx] = non_empty_cnt;
 		stats->statypid[slot_idx] = FLOAT8OID;
 		stats->statyplen[slot_idx] = sizeof(float8);
 		stats->statypbyval[slot_idx] = FLOAT8PASSBYVAL;
