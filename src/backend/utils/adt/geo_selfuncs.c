@@ -125,7 +125,6 @@ areajoinsel(PG_FUNCTION_ARGS)
     int         nhist;
     RangeBound *hist_lower1, *hist_lower2;
     RangeBound *hist_upper1, *hist_upper2;
-	Datum *hist_freq1, *hist_freq2;
     int         i;
     Form_pg_statistic stats1 = NULL;
     TypeCacheEntry *typcache = NULL;
@@ -133,6 +132,7 @@ areajoinsel(PG_FUNCTION_ARGS)
     bool        empty;
 
     int count1, count2;
+    Datum       upper_value1, lower_value1, upper_value2, lower_value2;
 
 
     get_join_variables(root, args, sjinfo,
@@ -148,69 +148,25 @@ areajoinsel(PG_FUNCTION_ARGS)
     /* Can't use the histogram with insecure range support functions */
     if (!statistic_proc_security_check(&vardata1, opfuncoid))
         PG_RETURN_FLOAT8((float8) selec);
-
+    /*Left Important_histogram*/
+    memset(&sslot2, 0, sizeof(sslot1));
     if (HeapTupleIsValid(vardata1.statsTuple))
-    {
         stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
-        /* Try to get fraction of empty ranges */
-        if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
-                             STATISTIC_KIND_BOUNDS_HISTOGRAM,
-                             InvalidOid, ATTSTATSSLOT_VALUES))
-        {
-            ReleaseVariableStats(vardata1);
-            ReleaseVariableStats(vardata2);
-            PG_RETURN_FLOAT8((float8) selec);
-        }
-    }
-    nhist = sslot1.nvalues;
-    hist_lower1 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
-	hist_upper1 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
-	    for (i = 0; i < nhist; i++)
-    {
-        range_deserialize(typcache, DatumGetRangeTypeP(sslot1.values[i]),
-                          &hist_lower1[i], &hist_upper1[i], &empty);
-        /* The histogram should not contain any empty ranges */
-        if (empty)
-            elog(ERROR, "bounds histogram contains an empty range");
-    }
 
-
-	typcache = range_get_typcache(fcinfo, vardata2.vartype);
-	/*Bound Histogram right var*/
-	/* Can't use the histogram with insecure range support functions */
-    if (!statistic_proc_security_check(&vardata2, opfuncoid))
+    if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
+                            STATISTIC_KIND_IMPORTANT_HISTOGRAM, 
+                    InvalidOid, ATTSTATSSLOT_VALUES)){
+        ReleaseVariableStats(vardata1);
+        ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
-
-    if (HeapTupleIsValid(vardata2.statsTuple))
-    {
-        stats1 = (Form_pg_statistic) GETSTRUCT(vardata2.statsTuple);
-        /* Try to get fraction of empty ranges */
-        if (!get_attstatsslot(&sslot2, vardata2.statsTuple,
-                             STATISTIC_KIND_BOUNDS_HISTOGRAM,
-                             InvalidOid, ATTSTATSSLOT_VALUES))
-        {
-            ReleaseVariableStats(vardata1);
-            ReleaseVariableStats(vardata2);
-            PG_RETURN_FLOAT8((float8) selec);
-        }
     }
-    hist_upper2 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
-	hist_lower2 = (RangeBound *) palloc(sizeof(RangeBound) * nhist);
-    for (i = 0; i < nhist; i++)
-    {
-        range_deserialize(typcache, DatumGetRangeTypeP(sslot2.values[i]),
-                          &hist_lower2[i], &hist_upper2[i], &empty);
-        /* The histogram should not contain any empty ranges */
-        if (empty)
-            elog(ERROR, "bounds histogram contains an empty range");
-    }
+    printf("bonjoursama : %d, %d, %d\n", sslot1.values[0], sslot1.values[1], sslot1.values[2]);
+    count1 = sslot1.values[0];
+    lower_value1 = sslot1.values[1];
+    upper_value1 = sslot1.values[2];
 
-    count1 = sslot1.nvalues;
-    count2 = sslot2.nvalues;
-
-    /* Freq Histogram left var*/
-    typcache = range_get_typcache(fcinfo, vardata1.vartype);
-	memset(&sslot1, 0, sizeof(sslot1));
+    /*Left Pres_histogram*/
+    memset(&sslot1, 0, sizeof(sslot1));
     if (HeapTupleIsValid(vardata1.statsTuple))
         stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
 
@@ -221,19 +177,43 @@ areajoinsel(PG_FUNCTION_ARGS)
         ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
     }
-    printf("hihihihihi\n");
+    /*printf("hihihihihi\n");
     printf("%d\n", sslot1.nvalues);
     for ( i = 0; i < 10; i++){
         printf("%d\n", DatumGetInt32(sslot1.values[i]));
     }
     printf("finihihihih\n");
+    */
 
 
-    /* Freq Histogram right var*/
-    typcache = range_get_typcache(fcinfo, vardata2.vartype);
-	memset(&sslot2, 0, sizeof(sslot2));
+	typcache = range_get_typcache(fcinfo, vardata2.vartype);
+	/*Bound Histogram right var*/
+	/* Can't use the histogram with insecure range support functions */
+    if (!statistic_proc_security_check(&vardata2, opfuncoid))
+        PG_RETURN_FLOAT8((float8) selec);
+
+    /*Right Important_histogram*/
+    memset(&sslot2, 0, sizeof(sslot2));
     if (HeapTupleIsValid(vardata2.statsTuple))
-        stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata2.statsTuple);
+
+    if (!get_attstatsslot(&sslot2, vardata2.statsTuple,
+                            STATISTIC_KIND_IMPORTANT_HISTOGRAM, 
+                    InvalidOid, ATTSTATSSLOT_VALUES)){
+        ReleaseVariableStats(vardata1);
+        ReleaseVariableStats(vardata2);
+        PG_RETURN_FLOAT8((float8) selec);
+    }
+    printf("bonjoursama : %d, %d, %d\n", sslot2.values[0], sslot2.values[1], sslot2.values[2]);
+    count2 = sslot2.values[0];
+    lower_value2 = sslot1.values[1];
+    upper_value2 = sslot2.values[2];
+
+
+    /*Right Pres_histogram*/
+    memset(&sslot2, 0, sizeof(sslot2));
+    if (HeapTupleIsValid(vardata2.statsTuple))
+        stats1 = (Form_pg_statistic) GETSTRUCT(vardata2.statsTuple);
 
     if (!get_attstatsslot(&sslot2, vardata2.statsTuple,
                             STATISTIC_KIND_FREQ_HISTOGRAM, 
@@ -242,33 +222,37 @@ areajoinsel(PG_FUNCTION_ARGS)
         ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
     }
-    printf("hihihihihi");
+    /*printf("hihihihihi\n");
     printf("%d\n", sslot2.nvalues);
     for ( i = 0; i < 10; i++){
         printf("%d\n", DatumGetInt32(sslot2.values[i]));
     }
     printf("finihihihih\n");
+    */
+    
+
 
 
     int currentLower1, currentLower2, currentUpper1, currentUpper2;
     int depth1, depth2;
-    depth1 = (DatumGetInt16(hist_upper1[count1 -1].val) -1 
-                            - DatumGetInt16(hist_lower1[0].val)) / sslot1.nvalues;
-    depth2 = (DatumGetInt16(hist_upper2[count2-1].val) -1 
-                            - DatumGetInt16(hist_lower2[0].val)) / sslot2.nvalues;
+    depth1 = (DatumGetInt16(upper_value1)-1
+                            - DatumGetInt16(lower_value1)) / sslot1.nvalues;
+    depth2 = (DatumGetInt16(upper_value2)-1
+                            - DatumGetInt16(lower_value2)) / sslot2.nvalues;
+                            printf("depths : %d, %d\n", depth1, depth2);
     float mult = 0.0;
     for(i = 0; i < sslot2.nvalues; i++){
-        currentLower2 = (depth2 * i) + DatumGetInt16(hist_lower2[0].val);
-        currentUpper2 = (depth2 * i) + DatumGetInt16(hist_lower2[0].val) + depth2;
+        currentLower2 = (depth2 * i) + DatumGetInt16(lower_value2);
+        currentUpper2 = (depth2 * i) + DatumGetInt16(lower_value2) + depth2;
         if(i == 9){
-            currentUpper2 = DatumGetInt16(hist_upper2[count2 -1].val);
+            currentUpper2 = DatumGetInt16(upper_value2);
         }
         for(int j = 0; j < sslot1.nvalues; j++){
-            currentLower1 = (depth1 * j) + DatumGetInt16(hist_lower1[0].val);
-            currentUpper1 = (depth1 * j) + DatumGetInt16(hist_lower1[0].val) + depth1;
+            currentLower1 = (depth1 * j) + DatumGetInt16(lower_value1);
+            currentUpper1 = (depth1 * j) + DatumGetInt16(lower_value1) + depth1;
             
             if(j == 9){
-                currentUpper1 = DatumGetInt16(hist_upper1[count1 -1].val);
+                currentUpper1 = DatumGetInt16(upper_value1);
             }
             if(currentLower1 <= currentLower2){
                 if(currentUpper1 >= currentLower2){
@@ -283,20 +267,12 @@ areajoinsel(PG_FUNCTION_ARGS)
             }
         }
     }
-    if(count1 < count2){
-        selec = selec*2 / (count1 * sslot1.nvalues * sslot2.nvalues);
-    }else{
-        selec = selec*2 / (count2 * sslot1.nvalues * sslot2.nvalues);
-    }
+
+    selec = selec / (count1 * count2);
 
     printf("calc : %f", selec);
 
     fflush(stdout);
-
-    pfree(hist_lower1);
-    pfree(hist_upper1);
-	pfree(hist_lower2);
-	pfree(hist_upper2);
 
     free_attstatsslot(&sslot1);
 	free_attstatsslot(&sslot2);

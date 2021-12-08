@@ -255,6 +255,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		Datum	   *bound_hist_values;
 		Datum	   *length_hist_values;
 		Datum	   *freq_hist_values;
+		Datum	   *important_hist_values;
 		int			pos,
 					posfrac,
 					delta,
@@ -417,6 +418,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			num_hist = 10;
 			RangeBound lower = (RangeBound) lowers[0];
 			RangeBound upper = (RangeBound) uppers[non_empty_cnt-1];
+			
 			if(num_hist > upper.val){
 				num_hist = upper.val;
 			}
@@ -426,7 +428,6 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			int beginBin;
 			int endBin;
 			int depth = (int) ((upper.val-1 - lower.val ) / num_hist);
-			printf("Depth : %d\n", depth);
 
 			freq_hist_values = (Datum *) palloc(num_hist * sizeof(Datum));
 
@@ -436,8 +437,6 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			*
 			*/
 
-			printf("Lower : %d\n", lower.val);
-			printf("Upper : %d\n", upper.val-1);
 
 			for(i = 0; i < num_hist; i++){
 				freq_hist_values[i] = 0;
@@ -449,8 +448,6 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 
 				endBin = (int) ((currentUpper.val-1 - lower.val) / depth);
 				beginBin = (int) ((currentLower.val - lower.val) / depth);
-				printf("Begin : %d\n", beginBin);
-				printf("End : %d\n", endBin);
 
 				if (endBin >num_hist){
 					endBin = num_hist-1;
@@ -477,6 +474,34 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		stats->statypalign[slot_idx] = 'd';
 
 		stats->stakind[slot_idx] = STATISTIC_KIND_FREQ_HISTOGRAM;
+
+		slot_idx++;
+				/*
+		* Create important values histogram
+		*/
+		if(non_null_cnt >=2){
+
+			num_hist = 3;
+			RangeBound lower = (RangeBound) lowers[0];
+			RangeBound upper = (RangeBound) uppers[non_empty_cnt-1];
+
+
+			important_hist_values = (Datum *) palloc(num_hist * sizeof(Datum));
+			important_hist_values[0] = non_null_cnt;
+			important_hist_values[1] = lower.val;
+			important_hist_values[2] = upper.val;
+
+		}
+		stats->staop[slot_idx] = InvalidOid;
+		stats->stacoll[slot_idx] = InvalidOid;
+		stats->stavalues[slot_idx] = important_hist_values;
+		stats->numvalues[slot_idx] = num_hist;
+		stats->statypid[slot_idx] = FLOAT8OID;
+		stats->statyplen[slot_idx] = sizeof(float8);
+		stats->statypbyval[slot_idx] = FLOAT8PASSBYVAL;
+		stats->statypalign[slot_idx] = 'd';
+
+		stats->stakind[slot_idx] = STATISTIC_KIND_IMPORTANT_HISTOGRAM;
 
 
 		MemoryContextSwitchTo(old_cxt);
