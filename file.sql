@@ -56,14 +56,14 @@ declare
 	  counter32 integer;
 begin
 
-   for counter in 1..100000 loop
+   for counter in 1..20000 loop
    	
 	  
-	select * from random_between(0,3000) INTO counter11;
-	select * from random_between(0,3000) INTO counter21;
+	select * from random_between(0,300) INTO counter11;
+	select * from random_between(990,1500) INTO counter21;
 	select * from random_between(0,3000) INTO counter31;
-	select * from random_between(counter11,3000) INTO counter12;
-	select * from random_between(counter21,3000) INTO counter22;
+	select * from random_between(300,992) INTO counter12;
+	select * from random_between(1500,2000) INTO counter22;
 	select * from random_between(counter31,3000) INTO counter32;
 	  
    	

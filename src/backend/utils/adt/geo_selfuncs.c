@@ -160,7 +160,6 @@ areajoinsel(PG_FUNCTION_ARGS)
         ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
     }
-    printf("bonjoursama : %d, %d, %d\n", sslot1.values[0], sslot1.values[1], sslot1.values[2]);
     count1 = sslot1.values[0];
     lower_value1 = sslot1.values[1];
     upper_value1 = sslot1.values[2];
@@ -177,13 +176,7 @@ areajoinsel(PG_FUNCTION_ARGS)
         ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
     }
-    /*printf("hihihihihi\n");
-    printf("%d\n", sslot1.nvalues);
-    for ( i = 0; i < 10; i++){
-        printf("%d\n", DatumGetInt32(sslot1.values[i]));
-    }
-    printf("finihihihih\n");
-    */
+    
 
 
 	typcache = range_get_typcache(fcinfo, vardata2.vartype);
@@ -204,9 +197,8 @@ areajoinsel(PG_FUNCTION_ARGS)
         ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
     }
-    printf("bonjoursama : %d, %d, %d\n", sslot2.values[0], sslot2.values[1], sslot2.values[2]);
     count2 = sslot2.values[0];
-    lower_value2 = sslot1.values[1];
+    lower_value2 = sslot2.values[1];
     upper_value2 = sslot2.values[2];
 
 
@@ -222,37 +214,30 @@ areajoinsel(PG_FUNCTION_ARGS)
         ReleaseVariableStats(vardata2);
         PG_RETURN_FLOAT8((float8) selec);
     }
-    /*printf("hihihihihi\n");
-    printf("%d\n", sslot2.nvalues);
-    for ( i = 0; i < 10; i++){
-        printf("%d\n", DatumGetInt32(sslot2.values[i]));
-    }
-    printf("finihihihih\n");
-    */
+
     
 
 
 
     int currentLower1, currentLower2, currentUpper1, currentUpper2;
     int depth1, depth2;
-    depth1 = (DatumGetInt16(upper_value1)-1
-                            - DatumGetInt16(lower_value1)) / sslot1.nvalues;
-    depth2 = (DatumGetInt16(upper_value2)-1
-                            - DatumGetInt16(lower_value2)) / sslot2.nvalues;
-                            printf("depths : %d, %d\n", depth1, depth2);
+    depth1 = (DatumGetInt32(upper_value1)-1
+                            - DatumGetInt32(lower_value1)) / sslot1.nvalues;
+    depth2 = (DatumGetInt32(upper_value2)-1
+                            - DatumGetInt32(lower_value2)) / sslot2.nvalues;
     float mult = 0.0;
     for(i = 0; i < sslot2.nvalues; i++){
-        currentLower2 = (depth2 * i) + DatumGetInt16(lower_value2);
-        currentUpper2 = (depth2 * i) + DatumGetInt16(lower_value2) + depth2;
+        currentLower2 = (depth2 * i) + DatumGetInt32(lower_value2);
+        currentUpper2 = (depth2 * i) + DatumGetInt32(lower_value2) + depth2;
         if(i == 9){
-            currentUpper2 = DatumGetInt16(upper_value2);
+            currentUpper2 = DatumGetInt32(upper_value2);
         }
         for(int j = 0; j < sslot1.nvalues; j++){
-            currentLower1 = (depth1 * j) + DatumGetInt16(lower_value1);
-            currentUpper1 = (depth1 * j) + DatumGetInt16(lower_value1) + depth1;
+            currentLower1 = (depth1 * j) + DatumGetInt32(lower_value1);
+            currentUpper1 = (depth1 * j) + DatumGetInt32(lower_value1) + depth1;
             
             if(j == 9){
-                currentUpper1 = DatumGetInt16(upper_value1);
+                currentUpper1 = DatumGetInt32(upper_value1);
             }
             if(currentLower1 <= currentLower2){
                 if(currentUpper1 >= currentLower2){
@@ -262,7 +247,7 @@ areajoinsel(PG_FUNCTION_ARGS)
             }else{
                 if(currentUpper2 >= currentLower1){
                     mult = ((float) currentUpper2 - (float) currentLower1) / (float) depth2;
-                    selec += (DatumGetInt32(sslot1.values[j]) * DatumGetInt16(sslot2.values[i]) * mult);
+                    selec += (DatumGetInt32(sslot1.values[j]) * DatumGetInt32(sslot2.values[i]) * mult);
                 }
             }
         }
@@ -270,7 +255,7 @@ areajoinsel(PG_FUNCTION_ARGS)
 
     selec = selec / (count1 * count2);
 
-    printf("calc : %f", selec);
+    printf("selec\n : %f", selec);
 
     fflush(stdout);
 
@@ -282,46 +267,6 @@ areajoinsel(PG_FUNCTION_ARGS)
 
     CLAMP_PROBABILITY(selec);
     PG_RETURN_FLOAT8((float8) selec);
-
-
-	/*PlannerInfo *root = (PlannerInfo *) PG_GETARG_POINTER(0);
-    Oid         operator = PG_GETARG_OID(1);
-    List       *args = (List *) PG_GETARG_POINTER(2);
-    JoinType    jointype = (JoinType) PG_GETARG_INT16(3);
-    SpecialJoinInfo *sjinfo = (SpecialJoinInfo *) PG_GETARG_POINTER(4);
-    Oid         collation = PG_GET_COLLATION();
-
-	double      selec = 0.005;
-
-    VariableStatData vardata1;
-    VariableStatData vardata2;
-
-	AttStatsSlot sslot1;
-	int         i;
-	bool join_is_reversed;
-	Form_pg_statistic stats1 = NULL;
-    TypeCacheEntry *typcache = NULL;
-	
-
-	get_join_variables(root, args, sjinfo,
-                       &vardata1, &vardata2, &join_is_reversed);
-	typcache = range_get_typcache(fcinfo, vardata1.vartype);
-	memset(&sslot1, 0, sizeof(sslot1));
-	    if (HeapTupleIsValid(vardata1.statsTuple)){
-        stats1 = (Form_pg_statistic) GETSTRUCT(vardata1.statsTuple);
-
-        if (!get_attstatsslot(&sslot1, vardata1.statsTuple,
-                             STATISTIC_KIND_FREQ_HISTOGRAM, 
-						OID_RANGE_OVERLAP_OP, ATTSTATSSLOT_VALUES)){
-            ReleaseVariableStats(vardata1);
-            ReleaseVariableStats(vardata2);
-            PG_RETURN_FLOAT8((float8) selec);
-        }
-		printf("%d", sslot1.nvalues);
-		for ( i = 0; i < 10; i++){
-				printf("%d\n", DatumGetInt32(sslot1.values[i]));
-			}
-		free_attstatsslot(&sslot1);*/
 
 		
     }
