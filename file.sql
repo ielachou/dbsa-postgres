@@ -34,7 +34,7 @@ CREATE TABLE Table3
 
 
 
-/*
+
 CREATE OR REPLACE FUNCTION random_between(low INT ,high INT) 
    RETURNS INT AS
 $$
@@ -43,7 +43,7 @@ BEGIN
 END;
 $$ language 'plpgsql' STRICT;
 
-*/
+
 
 do $$
 
