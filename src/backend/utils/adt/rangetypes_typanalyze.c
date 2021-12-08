@@ -460,7 +460,6 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			for(int k = 0; k < 10;k++){
 				printf("i : %d , val : %d\n", k, freq_hist_values[k]);
 			}
-			printf("HAHAHAHAHAH");
 
 			fflush(stdout);
 

@@ -40,6 +40,7 @@ static double calc_hist_selectivity_scalar(TypeCacheEntry *typcache,
 										   const RangeBound *constbound,
 										   const RangeBound *hist, int hist_nvalues,
 										   bool equal);
+static double estimate_overlap(AttStatsSlot pres, Datum count, Datum lower_value, Datum upper_value, RangeBound const_upper, RangeBound const_lower);
 static int	rbound_bsearch(TypeCacheEntry *typcache, const RangeBound *value,
 						   const RangeBound *hist, int hist_length, bool equal);
 static float8 get_position(TypeCacheEntry *typcache, const RangeBound *value,
@@ -359,7 +360,6 @@ calc_rangesel(TypeCacheEntry *typcache, VariableStatData *vardata,
 
 	/* result should be in range, but make sure... */
 	CLAMP_PROBABILITY(selec);
-
 	return selec;
 }
 
@@ -375,14 +375,20 @@ calc_hist_selectivity(TypeCacheEntry *typcache, VariableStatData *vardata,
 {
 	AttStatsSlot hslot;
 	AttStatsSlot lslot;
+	AttStatsSlot pres;
 	int			nhist;
 	RangeBound *hist_lower;
 	RangeBound *hist_upper;
 	int			i;
+	int count;
+	Datum 		lower_value;
+	Datum		upper_value;
 	RangeBound	const_lower;
 	RangeBound	const_upper;
 	bool		empty;
 	double		hist_selec;
+
+	
 
 	/* Can't use the histogram with insecure range support functions */
 	if (!statistic_proc_security_check(vardata,
@@ -423,6 +429,32 @@ calc_hist_selectivity(TypeCacheEntry *typcache, VariableStatData *vardata,
 			elog(ERROR, "bounds histogram contains an empty range");
 	}
 
+	/**
+	 Get presence histogram and important values
+	 */
+	 /* Can't use the histogram with insecure range support functions */
+    /*Left Important_histogram*/
+    memset(&pres, 0, sizeof(pres));
+    if (HeapTupleIsValid(vardata->statsTuple))
+
+    if (!get_attstatsslot(&pres, vardata->statsTuple,
+                            STATISTIC_KIND_IMPORTANT_HISTOGRAM, 
+                    InvalidOid, ATTSTATSSLOT_VALUES)){
+        PG_RETURN_FLOAT8((float8) hist_selec);
+    }
+    count = pres.values[0];
+    lower_value = pres.values[1];
+    upper_value = pres.values[2];
+
+    /*Left Pres_histogram*/
+    memset(&pres, 0, sizeof(pres));
+    if (HeapTupleIsValid(vardata->statsTuple))
+    if (!get_attstatsslot(&pres, vardata->statsTuple,
+                            STATISTIC_KIND_FREQ_HISTOGRAM, 
+                    OID_RANGE_OVERLAP_OP, ATTSTATSSLOT_VALUES)){
+        PG_RETURN_FLOAT8((float8) hist_selec);
+    }
+
 	/* @> and @< also need a histogram of range lengths */
 	if (operator == OID_RANGE_CONTAINS_OP ||
 		operator == OID_RANGE_CONTAINED_OP)
@@ -451,6 +483,7 @@ calc_hist_selectivity(TypeCacheEntry *typcache, VariableStatData *vardata,
 	/* Extract the bounds of the constant value. */
 	range_deserialize(typcache, constval, &const_lower, &const_upper, &empty);
 	Assert(!empty);
+	printf("lower : %d\n", const_lower.val);
 
 	/*
 	 * Calculate selectivity comparing the lower or upper bound of the
@@ -520,6 +553,10 @@ calc_hist_selectivity(TypeCacheEntry *typcache, VariableStatData *vardata,
 			break;
 
 		case OID_RANGE_OVERLAP_OP:
+			hist_selec = 
+				estimate_overlap(pres, count, lower_value, upper_value, const_upper, const_lower);
+			break;
+
 		case OID_RANGE_CONTAINS_ELEM_OP:
 
 			/*
@@ -583,10 +620,70 @@ calc_hist_selectivity(TypeCacheEntry *typcache, VariableStatData *vardata,
 
 	free_attstatsslot(&lslot);
 	free_attstatsslot(&hslot);
-
+	free_attstatsslot(&pres);
 	return hist_selec;
 }
 
+static double estimate_overlap(AttStatsSlot pres, Datum count, Datum lower_value, Datum upper_value, RangeBound const_upper, RangeBound const_lower){
+	double selec = 0;
+
+	int const_num_hist = 10;
+	if(const_num_hist > (const_upper.val- const_lower.val-1)){
+		const_num_hist = const_upper.val- const_lower.val-1;
+	}
+	Datum* const_hist = (Datum *) palloc(const_num_hist * sizeof(Datum));
+
+
+	/* Create histogram for condition range */
+	for(int i = 0; i < const_num_hist; i++){
+		const_hist[i] = 1;
+	}
+	printf("num_hist : %d\n", const_num_hist);
+	int currentLower1, currentLower2, currentUpper1, currentUpper2;
+    int depth1, depth2;
+    depth1 = (DatumGetInt32(upper_value)-1
+                            - DatumGetInt32(lower_value)) / pres.nvalues;
+    depth2 = (DatumGetInt32(const_upper.val)-1
+                            - DatumGetInt32(const_lower.val)) / const_num_hist;
+    float mult = 0.0;
+    for(int i = 0; i < const_num_hist; i++){
+        currentLower2 = (depth2 * i) + DatumGetInt32(const_lower.val);
+        currentUpper2 = (depth2 * i) + DatumGetInt32(const_lower.val) + depth2;
+        if(i == 9){
+            currentUpper2 = DatumGetInt32(upper_value);
+        }
+        for(int j = 0; j < pres.nvalues; j++){
+            currentLower1 = (depth1 * j) + DatumGetInt32(lower_value);
+            currentUpper1 = (depth1 * j) + DatumGetInt32(lower_value) + depth1;
+            
+            if(j == 9){
+                currentUpper1 = DatumGetInt32(upper_value);
+            }
+            if(currentLower1 <= currentLower2){
+                if(currentUpper1 >= currentLower2){
+                    mult = ((float) currentUpper1 - (float) currentLower2) / (float) depth1;
+                    selec += (DatumGetInt32(pres.values[j]) * DatumGetInt32(const_hist[i]) * mult);
+                }
+            }else{
+                if(currentUpper2 >= currentLower1){
+                    mult = ((float) currentUpper2 - (float) currentLower1) / (float) depth2;
+                    selec += (DatumGetInt32(pres.values[j]) * DatumGetInt32(const_hist[i]) * mult);
+                }
+            }
+        }
+    }
+
+	printf("selec avant: %f\n", selec);
+	selec = selec / (count);
+
+    printf("selec: %f", selec);
+
+    fflush(stdout);
+
+	return selec;
+
+
+}
 
 /*
  * Look up the fraction of values less than (or equal, if 'equal' argument
