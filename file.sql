@@ -31,25 +31,25 @@ CREATE TABLE Table3
 
 do $$
 begin
-   for counter in 1..20000 loop
+   for counter in 1..100000 loop
     INSERT INTO Table1  (r1,r2,r3)
 	VALUES (
 
-		int4range(floor(random() * (300-0+1) + 0)::int,floor(random() *(1000-300+1) + 300)::int),	
+		int4range(floor(random() * (10-0+1) + 0)::int,floor(random() *(20-10+1) + 10)::int),	
 		tsrange(timestamp '2000-01-01 00:00:00' + random() * (timestamp '2010-01-01 00:00:00' -timestamp '2000-01-01 00:00:00'), timestamp '2010-01-01 00:00:00' +random() * (timestamp '2021-01-01 00:00:00' -timestamp '2010-01-01 00:00:00')),
 		daterange(date '2000-01-01' + floor(random()* (date '2010-01-01' -date '2000-01-01'))::int, date '2010-01-01' +floor(random() * (date '2021-01-01' -date '2010-01-01'))::int)
 		);
     INSERT INTO Table2  (r1,r2,r3)
 	VALUES (
 
-		int4range(floor(random() * (1500-990+1) + 990)::int,floor(random() *(2000-1500+1) + 1500)::int),	
+		int4range(floor(random() * (10-0+1) + 0)::int,floor(random() *(20-10+1) + 10)::int),	
 		tsrange(timestamp '2000-01-01 00:00:00' + random() * (timestamp '2010-01-01 00:00:00' -timestamp '2000-01-01 00:00:00'), timestamp '2010-01-01 00:00:00' +random() * (timestamp '2021-01-01 00:00:00' -timestamp '2010-01-01 00:00:00')),
 		daterange(date '2000-01-01' + floor(random()* (date '2010-01-01' -date '2000-01-01'))::int, date '2010-01-01' +floor(random() * (date '2021-01-01' -date '2010-01-01'))::int)
 		);
      INSERT INTO Table3  (r1,r2,r3)
 	VALUES (
 
-		int4range(floor(random() * (10-0+1) + 0)::int,floor(random() *(3000-10+1) + 10)::int),	
+		int4range(floor(random() * (10-0+1) + 0)::int,floor(random() *(20-10+1) + 10)::int),	
 		tsrange(timestamp '2000-01-01 00:00:00' + random() * (timestamp '2010-01-01 00:00:00' -timestamp '2000-01-01 00:00:00'), timestamp '2010-01-01 00:00:00' +random() * (timestamp '2021-01-01 00:00:00' -timestamp '2010-01-01 00:00:00')),
 		daterange(date '2000-01-01' + floor(random()* (date '2010-01-01' -date '2000-01-01'))::int, date '2010-01-01' +floor(random() * (date '2021-01-01' -date '2010-01-01'))::int)
 		);
