@@ -1,6 +1,8 @@
+
 CREATE TABLE Table1
 (
     "ID" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),
+    "name" varchar(50),
     "r1" int4range,
     "r2" tsrange,
     "r3" daterange,
@@ -11,6 +13,7 @@ CREATE TABLE Table1
 CREATE TABLE Table2
 (
     "ID" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),
+    "name" varchar(50),
     "r1" int4range,
     "r2" tsrange,
     "r3" daterange,
@@ -22,6 +25,7 @@ CREATE TABLE Table2
 CREATE TABLE Table3
 (
     "ID" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),
+    "name" varchar(50),
     "r1" int4range,
     "r2" tsrange,
     "r3" daterange,
@@ -29,30 +33,66 @@ CREATE TABLE Table3
 );
 
 
+
+/*
+CREATE OR REPLACE FUNCTION random_between(low INT ,high INT) 
+   RETURNS INT AS
+$$
+BEGIN
+   RETURN floor(random()* (high-low + 1) + low)::int;
+END;
+$$ language 'plpgsql' STRICT;
+
+*/
+
 do $$
+
+declare
+	  counter11 integer;
+	  counter21 integer;
+	  counter31 integer;
+	  counter12 integer;
+	  counter22 integer;
+	  counter32 integer;
 begin
-   for counter in 1..20000 loop
-    INSERT INTO Table1  (r1,r2,r3)
-	VALUES (
 
-		int4range(floor(random() * (300-0+1) + 0)::int,floor(random() *(1000-300+1) + 300)::int),	
+   for counter in 1..100000 loop
+   	
+	  
+	select * from random_between(0,3000) INTO counter11;
+	select * from random_between(0,3000) INTO counter21;
+	select * from random_between(0,3000) INTO counter31;
+	select * from random_between(counter11,3000) INTO counter12;
+	select * from random_between(counter21,3000) INTO counter22;
+	select * from random_between(counter31,3000) INTO counter32;
+	  
+   	
+		
+	INSERT INTO Table1  (name,r1,r2,r3)
+	VALUES (
+		
+		(select (array['Wassim', 'Nidhal', 'Iliass','Ibrahim','Thierry','Mahmoud','Caca','Pipi','foo','Andrey'])[floor(random() * 10 + 1)]),
+		int4range(counter11,counter12),	
 		tsrange(timestamp '2000-01-01 00:00:00' + random() * (timestamp '2010-01-01 00:00:00' -timestamp '2000-01-01 00:00:00'), timestamp '2010-01-01 00:00:00' +random() * (timestamp '2021-01-01 00:00:00' -timestamp '2010-01-01 00:00:00')),
 		daterange(date '2000-01-01' + floor(random()* (date '2010-01-01' -date '2000-01-01'))::int, date '2010-01-01' +floor(random() * (date '2021-01-01' -date '2010-01-01'))::int)
 		);
-    INSERT INTO Table2  (r1,r2,r3)
+	INSERT INTO Table2  (name,r1,r2,r3)
 	VALUES (
-
-		int4range(floor(random() * (1500-990+1) + 990)::int,floor(random() *(2000-1500+1) + 1500)::int),	
+		
+		(select (array['Wassim', 'Nidhal', 'Iliass','Ibrahim','Thierry','Mahmoud','Caca','Pipi','foo','Andrey'])[floor(random() * 10 + 1)]),
+		int4range(counter21,counter22),	
 		tsrange(timestamp '2000-01-01 00:00:00' + random() * (timestamp '2010-01-01 00:00:00' -timestamp '2000-01-01 00:00:00'), timestamp '2010-01-01 00:00:00' +random() * (timestamp '2021-01-01 00:00:00' -timestamp '2010-01-01 00:00:00')),
 		daterange(date '2000-01-01' + floor(random()* (date '2010-01-01' -date '2000-01-01'))::int, date '2010-01-01' +floor(random() * (date '2021-01-01' -date '2010-01-01'))::int)
 		);
-     INSERT INTO Table3  (r1,r2,r3)
+	INSERT INTO Table3  (name,r1,r2,r3)
 	VALUES (
-
-		int4range(floor(random() * (10-0+1) + 0)::int,floor(random() *(3000-10+1) + 10)::int),	
+		
+		(select (array['Wassim', 'Nidhal', 'Iliass','Ibrahim','Thierry','Mahmoud','Caca','Pipi','foo','Andrey'])[floor(random() * 10 + 1)]),
+		int4range(counter31,counter32),	
 		tsrange(timestamp '2000-01-01 00:00:00' + random() * (timestamp '2010-01-01 00:00:00' -timestamp '2000-01-01 00:00:00'), timestamp '2010-01-01 00:00:00' +random() * (timestamp '2021-01-01 00:00:00' -timestamp '2010-01-01 00:00:00')),
 		daterange(date '2000-01-01' + floor(random()* (date '2010-01-01' -date '2000-01-01'))::int, date '2010-01-01' +floor(random() * (date '2021-01-01' -date '2010-01-01'))::int)
 		);
+	
    end loop;
 end; $$;
 
